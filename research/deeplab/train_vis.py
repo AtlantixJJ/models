@@ -266,6 +266,15 @@ def main(unused_argv):
       inputs_queue = prefetch_queue.prefetch_queue(
           samples, capacity=128 * config.num_clones)
 
+    end_point_name = [
+      "xception_65/exit_flow/block2/unit_1/xception_module/separable_conv3_pointwise/Relu:0",
+      "decoder/decoder_conv0_pointwise/Relu:0",
+      "decoder/decoder_conv1_pointwise/Relu:0"]
+    end_point = []
+    for n in end_point_name:
+      end_point.append(graph.get_tensor_by_name(n))
+
+
     # Create the global step on the device storing the variables.
     with tf.device(config.variables_device()):
       global_step = tf.train.get_or_create_global_step()

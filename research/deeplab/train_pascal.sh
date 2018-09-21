@@ -59,6 +59,7 @@ PASCAL_DATASET="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/tfrecord"
 NUM_ITERATIONS=30000
 python "${WORK_DIR}"/train.py \
   --logtostderr \
+  --num_clones 2\
   --train_split="trainval" \
   --model_variant="xception_65" \
   --atrous_rates=6 \
@@ -68,7 +69,7 @@ python "${WORK_DIR}"/train.py \
   --decoder_output_stride=4 \
   --train_crop_size=513 \
   --train_crop_size=513 \
-  --train_batch_size=4 \
+  --train_batch_size=16 \
   --training_number_of_steps="${NUM_ITERATIONS}" \
   --fine_tune_batch_norm=true \
   --tf_initial_checkpoint="${INIT_FOLDER}" \

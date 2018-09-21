@@ -248,7 +248,8 @@ def main(unused_argv):
   tf.gfile.MakeDirs(FLAGS.train_logdir)
   tf.logging.info('Training on %s set', FLAGS.train_split)
 
-  with tf.Graph().as_default() as graph:
+  if True: # fucking indent
+    graph = tf.get_default_graph()
     with tf.device(config.inputs_device()):
       samples = input_generator.get(
           dataset,
@@ -365,28 +366,6 @@ def main(unused_argv):
     # Soft placement allows placing on CPU ops without GPU implementation.
     session_config = tf.ConfigProto(
         allow_soft_placement=True, log_device_placement=False)
-    session_config.gpu_options.allow_growth = True
-
-    # Start the training.
-    slim.learning.train(
-        train_tensor,
-        logdir=FLAGS.train_logdir,
-        log_every_n_steps=FLAGS.log_steps,
-        master=FLAGS.master,
-        number_of_steps=FLAGS.training_number_of_steps,
-        is_chief=(FLAGS.task == 0),
-        session_config=session_config,
-        startup_delay_steps=startup_delay_steps,
-        init_fn=train_utils.get_model_init_fn(
-            FLAGS.train_logdir,
-            FLAGS.tf_initial_checkpoint,
-            FLAGS.initialize_last_layer,
-            last_layers,
-            ignore_missing_vars=True),
-        summary_op=summary_op,
-        save_summaries_secs=FLAGS.save_summaries_secs,
-        save_interval_secs=FLAGS.save_interval_secs)
-
 
 if __name__ == '__main__':
   flags.mark_flag_as_required('train_logdir')

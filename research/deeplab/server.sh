@@ -1,0 +1,1 @@
+scp *.sh *.py jianjin@52.168.87.19:/mnt/project/models/research/deeplab/

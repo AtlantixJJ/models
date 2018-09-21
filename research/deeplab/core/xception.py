@@ -437,7 +437,7 @@ def xception(inputs,
 
         # Convert end_points_collection into a dictionary of end_points.
         end_points = slim.utils.convert_collection_to_dict(
-            end_points_collection, clear_collection=True)
+            end_points_collection, clear_collection=False)
 
         if global_pool:
           # Global average pooling.
