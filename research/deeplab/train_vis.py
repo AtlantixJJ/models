@@ -212,15 +212,38 @@ def _build_deeplab(inputs_queue, outputs_to_num_classes, ignore_label):
       output_type_dict[model.MERGED_LOGITS_SCOPE],
       name=common.OUTPUT_TYPE)
 
-  for output, num_classes in six.iteritems(outputs_to_num_classes):
-    train_utils.add_softmax_cross_entropy_loss_for_each_scale(
-        outputs_to_scales_to_logits[output],
-        samples[common.LABEL],
-        num_classes,
-        ignore_label,
-        loss_weight=1.0,
-        upsample_logits=FLAGS.upsample_logits,
-        scope=output)
+  if True:
+    graph = tf.get_default_graph()
+    end_point_name = [
+      "xception_65/exit_flow/block2/unit_1/xception_module/separable_conv3_pointwise/Relu:0",
+      "decoder/decoder_conv0_pointwise/Relu:0",
+      "decoder/decoder_conv1_pointwise/Relu:0"]
+    end_point_alias = [
+      "net1/",
+      "net2/",
+      "net3/"
+    ]
+    end_point = []
+    for n in end_point_name:
+      end_point.append(graph.get_tensor_by_name(n))
+
+    draw_images = []
+    for x, a in zip(end_point, end_point_alias):
+      with tf.variable_scope("vis", reuse=tf.AUTO_REUSE):
+        draw_feature = tf.layers.conv2d(x, 128, 1, name=a+"compress_feat", activation=tf.nn.relu)
+        image = tf.layers.conv2d(draw_feature, 3, 3, padding='SAME', name="draw", activation=tf.nn.tanh)
+        draw_images.append(image)
+
+    # Add visualization
+    target_size = samples[common.IMAGE].get_shape().as_list()[1:3]
+    for vis_im, name in zip(draw_images, end_point_alias):
+      im_resize = tf.image.resize_bilinear(vis_im, target_size, align_corners=True)
+      tf.summary.image('reconstruction/' + name, im_resize)
+      # im_tar = tf.Print(samples[common.IMAGE], [tf.reduce_max(samples[common.IMAGE]), tf.reduce_min(samples[common.IMAGE])])
+      im_tar = samples[common.IMAGE] / 255 - 0.5
+      reconstruction_loss = tf.reduce_mean(tf.abs(im_resize - im_tar))
+      reconstruction_loss = tf.identity(reconstruction_loss, name=name+"recons_loss")
+      tf.add_to_collection(tf.GraphKeys.LOSSES, reconstruction_loss)
 
   return outputs_to_scales_to_logits
 
@@ -248,7 +271,8 @@ def main(unused_argv):
   tf.gfile.MakeDirs(FLAGS.train_logdir)
   tf.logging.info('Training on %s set', FLAGS.train_split)
 
-  with tf.Graph().as_default() as graph:
+  if True:
+    graph = tf.get_default_graph()
     with tf.device(config.inputs_device()):
       samples = input_generator.get(
           dataset,
@@ -265,15 +289,6 @@ def main(unused_argv):
           model_variant=FLAGS.model_variant)
       inputs_queue = prefetch_queue.prefetch_queue(
           samples, capacity=128 * config.num_clones)
-
-    end_point_name = [
-      "xception_65/exit_flow/block2/unit_1/xception_module/separable_conv3_pointwise/Relu:0",
-      "decoder/decoder_conv0_pointwise/Relu:0",
-      "decoder/decoder_conv1_pointwise/Relu:0"]
-    end_point = []
-    for n in end_point_name:
-      end_point.append(graph.get_tensor_by_name(n))
-
 
     # Create the global step on the device storing the variables.
     with tf.device(config.variables_device()):
@@ -297,7 +312,7 @@ def main(unused_argv):
     # Add summaries for model variables.
     for model_var in slim.get_model_variables():
       summaries.add(tf.summary.histogram(model_var.op.name, model_var))
-
+    
     # Add summaries for images, labels, semantic predictions
     if FLAGS.save_summaries_images:
       summary_image = graph.get_tensor_by_name(
@@ -341,8 +356,12 @@ def main(unused_argv):
       summaries.add(tf.summary.histogram(variable.op.name, variable))
 
     with tf.device(config.variables_device()):
+      vis_vars = [v for v in tf.trainable_variables() if "vis" in v.name]
+      for v in vis_vars:
+        print("=> " + v.name)
+
       total_loss, grads_and_vars = model_deploy.optimize_clones(
-          clones, optimizer)
+          clones, optimizer, var_list=vis_vars)
       total_loss = tf.check_numerics(total_loss, 'Loss is inf or nan.')
       summaries.add(tf.summary.scalar('total_loss', total_loss))
 
