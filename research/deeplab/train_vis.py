@@ -67,7 +67,7 @@ flags.DEFINE_integer('save_interval_secs', 1200,
 flags.DEFINE_integer('save_summaries_secs', 60,
                      'How often, in seconds, we compute the summaries.')
 
-flags.DEFINE_boolean('save_summaries_images', False,
+flags.DEFINE_boolean('save_summaries_images', True,
                      'Save sample inputs, labels, and semantic predictions as '
                      'images to summary.')
 
