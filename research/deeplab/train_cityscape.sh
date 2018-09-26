@@ -33,7 +33,7 @@ cd ..
 export PYTHONPATH=$PYTHONPATH:`pwd`:`pwd`/slim
 
 # restrict CUDA GPU
-export CUDA_VISIBLE_DEVICES=0,1,2,4,5,6
+export CUDA_VISIBLE_DEVICES=$1
 
 # Set up the working environment.
 CURRENT_DIR=$(pwd)
@@ -43,7 +43,8 @@ WORK_DIR="${CURRENT_DIR}/deeplab"
 CITYSCAPE_FOLDER="cityscapes"
 EXP_FOLDER="exp/train_on_trainval_set"
 DATASET_DIR=datasets
-INIT_FOLDER="${WORK_DIR}/init_models/xception/model.ckpt"
+# INIT_FOLDER="${WORK_DIR}/init_models/xception/model.ckpt"
+INIT_FOLDER="${WORK_DIR}/init_models/deeplabv3_cityscapes_train/model.ckpt"
 TRAIN_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${CITYSCAPE_FOLDER}/${EXP_FOLDER}/train"
 EVAL_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${CITYSCAPE_FOLDER}/${EXP_FOLDER}/eval"
 VIS_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${CITYSCAPE_FOLDER}/${EXP_FOLDER}/vis"
@@ -56,10 +57,10 @@ mkdir -p "${EXPORT_DIR}"
 
 CITYSCAPE_DATASET="${WORK_DIR}/${DATASET_DIR}/${CITYSCAPE_FOLDER}/tfrecord"
 
-NUM_ITERATIONS=30000
+NUM_ITERATIONS=90000
 python "${WORK_DIR}"/train.py \
   --logtostderr \
-  --num_clones 6\
+  --num_clones $3\
   --train_split="train" \
   --model_variant="xception_65" \
   --atrous_rates=6 \
@@ -67,15 +68,34 @@ python "${WORK_DIR}"/train.py \
   --atrous_rates=18 \
   --output_stride=16 \
   --decoder_output_stride=4 \
-  --train_crop_size=513 \
-  --train_crop_size=513 \
-  --train_batch_size=18 \
+  --train_crop_size=769 \
+  --train_crop_size=769 \
+  --train_batch_size=$2 \
   --training_number_of_steps="${NUM_ITERATIONS}" \
   --fine_tune_batch_norm=true \
   --tf_initial_checkpoint="${INIT_FOLDER}" \
   --train_logdir="${TRAIN_LOGDIR}" \
   --dataset=${CITYSCAPE_FOLDER} \
   --dataset_dir="${CITYSCAPE_DATASET}"
+
+# Export the trained checkpoint.
+CKPT_PATH="${TRAIN_LOGDIR}/model_firststage.ckpt-${NUM_ITERATIONS}"
+EXPORT_PATH="${EXPORT_DIR}/frozen_inference_graph_firststage.pb"
+
+python "${WORK_DIR}"/export_model.py \
+  --logtostderr \
+  --checkpoint_path="${CKPT_PATH}" \
+  --export_path="${EXPORT_PATH}" \
+  --model_variant="xception_65" \
+  --atrous_rates=6 \
+  --atrous_rates=12 \
+  --atrous_rates=18 \
+  --output_stride=16 \
+  --decoder_output_stride=4 \
+  --num_classes=21 \
+  --crop_size=769 \
+  --crop_size=769 \
+  --inference_scales=1.0
 
 # Run evaluation. This performs eval over the full val split (1449 images) and
 # will take a while.
@@ -89,11 +109,11 @@ python "${WORK_DIR}"/eval.py \
   --atrous_rates=18 \
   --output_stride=16 \
   --decoder_output_stride=4 \
-  --eval_crop_size=513 \
-  --eval_crop_size=513 \
+  --eval_crop_size=1025 \
+  --eval_crop_size=2049 \
   --checkpoint_dir="${TRAIN_LOGDIR}" \
   --eval_logdir="${EVAL_LOGDIR}" \
-  --dataset=${CITYSCAPE_FOLDER} \
+  --dataset="${CITYSCAPE_FOLDER}" \
   --dataset_dir="${CITYSCAPE_DATASET}" \
   --max_number_of_evaluations=1
 
@@ -107,11 +127,72 @@ python "${WORK_DIR}"/vis.py \
   --atrous_rates=18 \
   --output_stride=16 \
   --decoder_output_stride=4 \
-  --vis_crop_size=513 \
-  --vis_crop_size=513 \
+  --vis_crop_size=769 \
+  --vis_crop_size=769 \
+  --dataset="cityscapes" \
+  --colormap_type="cityscapes" \
   --checkpoint_dir="${TRAIN_LOGDIR}" \
   --vis_logdir="${VIS_LOGDIR}" \
+  --dataset_dir="${CITYSCAPE_DATASET}" \
+  --max_number_of_iterations=1
+
+NUM_ITERATIONS=90000
+python "${WORK_DIR}"/train.py \
+  --logtostderr \
+  --num_clones $3\
+  --train_split="train" \
+  --model_variant="xception_65" \
+  --atrous_rates=12 \
+  --atrous_rates=24 \
+  --atrous_rates=36 \
+  --output_stride=8 \
+  --decoder_output_stride=4 \
+  --train_crop_size=769 \
+  --train_crop_size=769 \
+  --train_batch_size=$2 \
+  --training_number_of_steps="${NUM_ITERATIONS}" \
+  --fine_tune_batch_norm=false \
+  --tf_initial_checkpoint="${INIT_FOLDER}" \
+  --train_logdir="${TRAIN_LOGDIR}" \
   --dataset=${CITYSCAPE_FOLDER} \
+  --dataset_dir="${CITYSCAPE_DATASET}"
+
+# Run evaluation. This performs eval over the full val split (1449 images) and
+# will take a while.
+# Using the provided checkpoint, one should expect mIOU=82.20%.
+python "${WORK_DIR}"/eval.py \
+  --logtostderr \
+  --eval_split="val" \
+  --model_variant="xception_65" \
+  --atrous_rates=12 \
+  --atrous_rates=24 \
+  --atrous_rates=36 \
+  --output_stride=8 \
+  --decoder_output_stride=4 \
+  --eval_crop_size=1025 \
+  --eval_crop_size=2049 \
+  --checkpoint_dir="${TRAIN_LOGDIR}" \
+  --eval_logdir="${EVAL_LOGDIR}" \
+  --dataset="${CITYSCAPE_FOLDER}" \
+  --dataset_dir="${CITYSCAPE_DATASET}" \
+  --max_number_of_evaluations=1
+
+# Visualize the results.
+python "${WORK_DIR}"/vis.py \
+  --logtostderr \
+  --vis_split="val" \
+  --model_variant="xception_65" \
+  --atrous_rates=12 \
+  --atrous_rates=24 \
+  --atrous_rates=36 \
+  --output_stride=8 \
+  --decoder_output_stride=4 \
+  --vis_crop_size=769 \
+  --vis_crop_size=769 \
+  --dataset="cityscapes" \
+  --colormap_type="cityscapes" \
+  --checkpoint_dir="${TRAIN_LOGDIR}" \
+  --vis_logdir="${VIS_LOGDIR}" \
   --dataset_dir="${CITYSCAPE_DATASET}" \
   --max_number_of_iterations=1
 
@@ -124,14 +205,14 @@ python "${WORK_DIR}"/export_model.py \
   --checkpoint_path="${CKPT_PATH}" \
   --export_path="${EXPORT_PATH}" \
   --model_variant="xception_65" \
-  --atrous_rates=6 \
   --atrous_rates=12 \
-  --atrous_rates=18 \
-  --output_stride=16 \
+  --atrous_rates=24 \
+  --atrous_rates=36 \
+  --output_stride=8 \
   --decoder_output_stride=4 \
   --num_classes=21 \
-  --crop_size=513 \
-  --crop_size=513 \
+  --crop_size=769 \
+  --crop_size=769 \
   --inference_scales=1.0
 
 # Run inference with the exported checkpoint.

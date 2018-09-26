@@ -43,7 +43,8 @@ WORK_DIR="${CURRENT_DIR}/deeplab"
 PASCAL_FOLDER="pascal_voc_seg"
 EXP_FOLDER="exp/train_on_trainval_set"
 DATASET_DIR=datasets
-INIT_FOLDER="${WORK_DIR}/init_models/xception/model.ckpt"
+# INIT_FOLDER="${WORK_DIR}/init_models/xception/model.ckpt"
+INIT_FOLDER="${WORK_DIR}/init_models/deeplabv3_pascal_trainval/model.ckpt"
 TRAIN_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/train"
 EVAL_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/eval"
 VIS_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/vis"
@@ -59,19 +60,20 @@ PASCAL_DATASET="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/tfrecord"
 NUM_ITERATIONS=30000
 python "${WORK_DIR}"/train.py \
   --logtostderr \
-  --num_clones 2\
+  --num_clones $3\
   --train_split="trainval" \
   --model_variant="xception_65" \
-  --atrous_rates=6 \
   --atrous_rates=12 \
-  --atrous_rates=18 \
-  --output_stride=16 \
+  --atrous_rates=24 \
+  --atrous_rates=36 \
+  --output_stride=8 \
   --decoder_output_stride=4 \
   --train_crop_size=513 \
   --train_crop_size=513 \
-  --train_batch_size=16 \
+  --train_batch_size=$2 \
+  --base_learning_rate=0.001 \
   --training_number_of_steps="${NUM_ITERATIONS}" \
-  --fine_tune_batch_norm=true \
+  --fine_tune_batch_norm=false \
   --tf_initial_checkpoint="${INIT_FOLDER}" \
   --train_logdir="${TRAIN_LOGDIR}" \
   --dataset_dir="${PASCAL_DATASET}"

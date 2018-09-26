@@ -230,7 +230,8 @@ def _build_deeplab(inputs_queue, outputs_to_num_classes, ignore_label):
     draw_images = []
     for x, a in zip(end_point, end_point_alias):
       with tf.variable_scope("vis", reuse=tf.AUTO_REUSE):
-        draw_feature = tf.layers.conv2d(x, 256, 1, name=a+"compress_feat", activation=tf.nn.relu)
+        draw_feature = tf.layers.conv2d(x, 512, 1, name=a+"compress_feat1", activation=tf.nn.relu)
+        draw_feature = tf.layers.conv2d(draw_feature, 256, 1, name=a+"compress_feat2", activation=tf.nn.relu)
         image = tf.layers.conv2d(draw_feature, 3, 3, padding='SAME', name="draw", activation=tf.nn.tanh)
         draw_images.append(image)
 
