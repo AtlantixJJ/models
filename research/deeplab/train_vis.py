@@ -64,7 +64,7 @@ flags.DEFINE_integer('log_steps', 10,
 flags.DEFINE_integer('save_interval_secs', 1200,
                      'How often, in seconds, we save the model to disk.')
 
-flags.DEFINE_integer('save_summaries_secs', 600,
+flags.DEFINE_integer('save_summaries_secs', 60,
                      'How often, in seconds, we compute the summaries.')
 
 flags.DEFINE_boolean('save_summaries_images', False,
@@ -78,7 +78,7 @@ flags.DEFINE_enum('learning_policy', 'poly', ['poly', 'step'],
 
 # Use 0.007 when training on PASCAL augmented training set, train_aug. When
 # fine-tuning on PASCAL trainval set, use learning rate=0.0001.
-flags.DEFINE_float('base_learning_rate', .0001,
+flags.DEFINE_float('base_learning_rate', .001,
                    'The base learning rate for model training.')
 
 flags.DEFINE_float('learning_rate_decay_factor', 0.1,
@@ -230,7 +230,7 @@ def _build_deeplab(inputs_queue, outputs_to_num_classes, ignore_label):
     draw_images = []
     for x, a in zip(end_point, end_point_alias):
       with tf.variable_scope("vis", reuse=tf.AUTO_REUSE):
-        draw_feature = tf.layers.conv2d(x, 128, 1, name=a+"compress_feat", activation=tf.nn.relu)
+        draw_feature = tf.layers.conv2d(x, 256, 1, name=a+"compress_feat", activation=tf.nn.relu)
         image = tf.layers.conv2d(draw_feature, 3, 3, padding='SAME', name="draw", activation=tf.nn.tanh)
         draw_images.append(image)
 
@@ -240,7 +240,7 @@ def _build_deeplab(inputs_queue, outputs_to_num_classes, ignore_label):
       im_resize = tf.image.resize_bilinear(vis_im, target_size, align_corners=True)
       tf.summary.image('reconstruction/' + name, im_resize)
       # im_tar = tf.Print(samples[common.IMAGE], [tf.reduce_max(samples[common.IMAGE]), tf.reduce_min(samples[common.IMAGE])])
-      im_tar = samples[common.IMAGE] / 255 - 0.5
+      im_tar = samples[common.IMAGE] / 127.5 - 1.0
       reconstruction_loss = tf.reduce_mean(tf.abs(im_resize - im_tar))
       reconstruction_loss = tf.identity(reconstruction_loss, name=name+"recons_loss")
       tf.add_to_collection(tf.GraphKeys.LOSSES, reconstruction_loss)
@@ -348,7 +348,8 @@ def main(unused_argv):
           FLAGS.learning_rate_decay_step, FLAGS.learning_rate_decay_factor,
           FLAGS.training_number_of_steps, FLAGS.learning_power,
           FLAGS.slow_start_step, FLAGS.slow_start_learning_rate)
-      optimizer = tf.train.MomentumOptimizer(learning_rate, FLAGS.momentum)
+      optimizer = tf.train.AdamOptimizer(learning_rate)
+      #tf.train.MomentumOptimizer(learning_rate, FLAGS.momentum)
       summaries.add(tf.summary.scalar('learning_rate', learning_rate))
 
     startup_delay_steps = FLAGS.task * FLAGS.startup_delay_steps
@@ -393,6 +394,7 @@ def main(unused_argv):
     # Soft placement allows placing on CPU ops without GPU implementation.
     session_config = tf.ConfigProto(
         allow_soft_placement=True, log_device_placement=False)
+    session_config.gpu_options.allow_growth = True
 
     # Start the training.
     slim.learning.train(

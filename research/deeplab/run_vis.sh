@@ -33,7 +33,7 @@ cd ..
 export PYTHONPATH=$PYTHONPATH:`pwd`:`pwd`/slim
 
 # restrict CUDA GPU
-export CUDA_VISIBLE_DEVICES=$1
+export CUDA_VISIBLE_DEVICES=3
 
 # Set up the working environment.
 CURRENT_DIR=$(pwd)
@@ -43,7 +43,7 @@ WORK_DIR="${CURRENT_DIR}/deeplab"
 CITYSCAPE_FOLDER="cityscapes"
 EXP_FOLDER="exp/train_on_trainval_set"
 DATASET_DIR=datasets
-INIT_FOLDER="${WORK_DIR}/init_models/xception/model.ckpt"
+INIT_FOLDER="${WORK_DIR}/${DATASET_DIR}/${CITYSCAPE_FOLDER}/${EXP_FOLDER}/train/model.ckpt-13447"
 TRAIN_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${CITYSCAPE_FOLDER}/${EXP_FOLDER}/train_vis"
 mkdir -p "${TRAIN_LOGDIR}"
 
@@ -61,7 +61,7 @@ ipython -i "${WORK_DIR}"/train_vis.py --\
   --decoder_output_stride=4 \
   --train_crop_size=513 \
   --train_crop_size=513 \
-  --train_batch_size=1 \
+  --train_batch_size=3 \
   --training_number_of_steps="${NUM_ITERATIONS}" \
   --fine_tune_batch_norm=true \
   --tf_initial_checkpoint="${INIT_FOLDER}" \

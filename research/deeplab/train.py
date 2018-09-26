@@ -61,7 +61,7 @@ flags.DEFINE_string('train_logdir', None,
 flags.DEFINE_integer('log_steps', 10,
                      'Display logging information at every log_steps.')
 
-flags.DEFINE_integer('save_interval_secs', 1200,
+flags.DEFINE_integer('save_interval_secs', 3600,
                      'How often, in seconds, we save the model to disk.')
 
 flags.DEFINE_integer('save_summaries_secs', 600,

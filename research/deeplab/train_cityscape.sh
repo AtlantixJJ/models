@@ -33,7 +33,7 @@ cd ..
 export PYTHONPATH=$PYTHONPATH:`pwd`:`pwd`/slim
 
 # restrict CUDA GPU
-export CUDA_VISIBLE_DEVICES=$1
+export CUDA_VISIBLE_DEVICES=0,1,2,4,5,6
 
 # Set up the working environment.
 CURRENT_DIR=$(pwd)
@@ -59,7 +59,7 @@ CITYSCAPE_DATASET="${WORK_DIR}/${DATASET_DIR}/${CITYSCAPE_FOLDER}/tfrecord"
 NUM_ITERATIONS=30000
 python "${WORK_DIR}"/train.py \
   --logtostderr \
-  --num_clones 2\
+  --num_clones 6\
   --train_split="train" \
   --model_variant="xception_65" \
   --atrous_rates=6 \
@@ -69,7 +69,7 @@ python "${WORK_DIR}"/train.py \
   --decoder_output_stride=4 \
   --train_crop_size=513 \
   --train_crop_size=513 \
-  --train_batch_size=16 \
+  --train_batch_size=18 \
   --training_number_of_steps="${NUM_ITERATIONS}" \
   --fine_tune_batch_norm=true \
   --tf_initial_checkpoint="${INIT_FOLDER}" \
