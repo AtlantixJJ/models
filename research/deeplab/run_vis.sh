@@ -53,7 +53,7 @@ mkdir -p "${TRAIN_LOGDIR}"
 
 CITYSCAPE_DATASET="${WORK_DIR}/${DATASET_DIR}/${CITYSCAPE_FOLDER}/tfrecord"
 
-NUM_ITERATIONS=10000
+NUM_ITERATIONS=30000
 ipython -i "${WORK_DIR}"/train_vis.py --\
   --logtostderr \
   --train_split="train" \
