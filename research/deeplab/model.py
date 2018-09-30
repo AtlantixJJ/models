@@ -110,7 +110,7 @@ def predict_labels_multi_scale(images,
 
   for i, image_scale in enumerate(eval_scales):
     with tf.variable_scope(tf.get_variable_scope(), reuse=True if i else None):
-      outputs_to_scales_to_logits = multi_scale_logits(
+      outputs_to_scales_to_logits, top_features = multi_scale_logits(
           images,
           model_options=model_options,
           image_pyramid=[image_scale],
@@ -119,7 +119,7 @@ def predict_labels_multi_scale(images,
 
     if add_flipped_images:
       with tf.variable_scope(tf.get_variable_scope(), reuse=True):
-        outputs_to_scales_to_logits_reversed = multi_scale_logits(
+        outputs_to_scales_to_logits_reversed, top_features = multi_scale_logits(
             tf.reverse_v2(images, [2]),
             model_options=model_options,
             image_pyramid=[image_scale],
@@ -167,7 +167,7 @@ def predict_labels(images, model_options, image_pyramid=None):
       prediction) and values storing Tensors representing predictions (argmax
       over channels). Each prediction has size [batch, height, width].
   """
-  outputs_to_scales_to_logits = multi_scale_logits(
+  outputs_to_scales_to_logits, top_features = multi_scale_logits(
       images,
       model_options=model_options,
       image_pyramid=image_pyramid,
@@ -275,7 +275,7 @@ def multi_scale_logits(images,
       scaled_images = images
 
     updated_options = model_options._replace(crop_size=scaled_crop_size)
-    outputs_to_logits = _get_logits(
+    outputs_to_logits, top_features = _get_logits(
         scaled_images,
         updated_options,
         weight_decay=weight_decay,
@@ -294,7 +294,7 @@ def multi_scale_logits(images,
       for output in sorted(model_options.outputs_to_num_classes):
         outputs_to_scales_to_logits[output][
             MERGED_LOGITS_SCOPE] = outputs_to_logits[output]
-      return outputs_to_scales_to_logits
+      return outputs_to_scales_to_logits, top_features
 
     # Save logits to the output map.
     for output in sorted(model_options.outputs_to_num_classes):
@@ -462,7 +462,7 @@ def _get_logits(images,
   Returns:
     outputs_to_logits: A map from output_type to logits.
   """
-  features, end_points = extract_features(
+  top_features, end_points = extract_features(
       images,
       model_options,
       weight_decay=weight_decay,
@@ -480,8 +480,9 @@ def _get_logits(images,
                                      1.0 / model_options.decoder_output_stride)
     decoder_width = scale_dimension(width,
                                     1.0 / model_options.decoder_output_stride)
-    features = refine_by_decoder(
-        features,
+    
+    refined_features = refine_by_decoder(
+        top_features,
         end_points,
         decoder_height=decoder_height,
         decoder_width=decoder_width,
@@ -495,7 +496,7 @@ def _get_logits(images,
   outputs_to_logits = {}
   for output in sorted(model_options.outputs_to_num_classes):
     outputs_to_logits[output] = get_branch_logits(
-        features,
+        refined_features,
         model_options.outputs_to_num_classes[output],
         model_options.atrous_rates,
         aspp_with_batch_norm=model_options.aspp_with_batch_norm,
@@ -504,7 +505,7 @@ def _get_logits(images,
         reuse=reuse,
         scope_suffix=output)
 
-  return outputs_to_logits
+  return outputs_to_logits, top_features
 
 
 def refine_by_decoder(features,

@@ -55,13 +55,14 @@ flags.DEFINE_integer('task', 0, 'The task ID.')
 
 # Settings for logging.
 
-flags.DEFINE_string('train_logdir', None,
+flags.DEFINE_string('train_logdir',
+  'datasets/cityscapes/exp/train_on_trainval_set/modify/',
                     'Where the checkpoint and logs are stored.')
 
 flags.DEFINE_integer('log_steps', 10,
                      'Display logging information at every log_steps.')
 
-flags.DEFINE_integer('save_interval_secs', 3600,
+flags.DEFINE_integer('save_interval_secs', 1200,
                      'How often, in seconds, we save the model to disk.')
 
 flags.DEFINE_integer('save_summaries_secs', 600,
@@ -78,7 +79,7 @@ flags.DEFINE_enum('learning_policy', 'poly', ['poly', 'step'],
 
 # Use 0.007 when training on PASCAL augmented training set, train_aug. When
 # fine-tuning on PASCAL trainval set, use learning rate=0.0001.
-flags.DEFINE_float('base_learning_rate', .0001,
+flags.DEFINE_float('base_learning_rate', .001,
                    'The base learning rate for model training.')
 
 flags.DEFINE_float('learning_rate_decay_factor', 0.1,
@@ -106,7 +107,7 @@ flags.DEFINE_integer('train_batch_size', 8,
 flags.DEFINE_float('weight_decay', 0.00004,
                    'The value of the weight decay for training.')
 
-flags.DEFINE_multi_integer('train_crop_size', [513, 513],
+flags.DEFINE_multi_integer('train_crop_size', [769, 769],
                            'Image crop size [height, width] during training.')
 
 flags.DEFINE_float('last_layer_gradient_multiplier', 1.0,
@@ -118,7 +119,7 @@ flags.DEFINE_boolean('upsample_logits', True,
 
 # Settings for fine-tuning the network.
 
-flags.DEFINE_string('tf_initial_checkpoint', None,
+flags.DEFINE_string('tf_initial_checkpoint', 'datasets/cityscapes/exp/train_on_trainval_set/train_vis/model.ckpt-9699',
                     'The initial checkpoint in tensorflow format.')
 
 # Set to False if one does not want to re-use the trained classifier weights.
@@ -136,7 +137,7 @@ flags.DEFINE_float('slow_start_learning_rate', 1e-4,
 
 # Set to True if one wants to fine-tune the batch norm parameters in DeepLabv3.
 # Set to False and use small batch size to save GPU memory.
-flags.DEFINE_boolean('fine_tune_batch_norm', True,
+flags.DEFINE_boolean('fine_tune_batch_norm', False,
                      'Fine tune the batch norm parameters or not.')
 
 flags.DEFINE_float('min_scale_factor', 0.5,
@@ -151,21 +152,20 @@ flags.DEFINE_float('scale_factor_step_size', 0.25,
 # For `xception_65`, use atrous_rates = [12, 24, 36] if output_stride = 8, or
 # rates = [6, 12, 18] if output_stride = 16. For `mobilenet_v2`, use None. Note
 # one could use different atrous_rates/output_stride during training/evaluation.
-flags.DEFINE_multi_integer('atrous_rates', None,
+flags.DEFINE_multi_integer('atrous_rates', [6, 12, 18],
                            'Atrous rates for atrous spatial pyramid pooling.')
 
 flags.DEFINE_integer('output_stride', 16,
                      'The ratio of input to output spatial resolution.')
 
 # Dataset settings.
-flags.DEFINE_string('dataset', 'pascal_voc_seg',
+flags.DEFINE_string('dataset', 'cityscapes',
                     'Name of the segmentation dataset.')
 
 flags.DEFINE_string('train_split', 'train',
                     'Which split of the dataset to be used for training')
 
-flags.DEFINE_string('dataset_dir', None, 'Where the dataset reside.')
-
+flags.DEFINE_string('dataset_dir', 'datasets/cityscapes/tfrecord', 'Where the dataset reside.')
 
 def _build_deeplab(inputs_queue, outputs_to_num_classes, ignore_label):
   """Builds a clone of DeepLab.
@@ -198,7 +198,7 @@ def _build_deeplab(inputs_queue, outputs_to_num_classes, ignore_label):
       crop_size=FLAGS.train_crop_size,
       atrous_rates=FLAGS.atrous_rates,
       output_stride=FLAGS.output_stride)
-  outputs_to_scales_to_logits, top_features = model.multi_scale_logits(
+  outputs_to_scales_to_logits = model.multi_scale_logits(
       samples[common.IMAGE],
       model_options=model_options,
       image_pyramid=FLAGS.image_pyramid,
@@ -212,17 +212,43 @@ def _build_deeplab(inputs_queue, outputs_to_num_classes, ignore_label):
       output_type_dict[model.MERGED_LOGITS_SCOPE],
       name=common.OUTPUT_TYPE)
 
-  for output, num_classes in six.iteritems(outputs_to_num_classes):
-    train_utils.add_softmax_cross_entropy_loss_for_each_scale(
-        outputs_to_scales_to_logits[output],
-        samples[common.LABEL],
-        num_classes,
-        ignore_label,
-        loss_weight=1.0,
-        upsample_logits=FLAGS.upsample_logits,
-        scope=output)
+  if True:
+    graph = tf.get_default_graph()
+    end_point_name = [
+      "xception_65/exit_flow/block2/unit_1/xception_module/separable_conv3_pointwise/Relu:0",
+      "decoder/decoder_conv0_pointwise/Relu:0",
+      "decoder/decoder_conv1_pointwise/Relu:0"]
+    end_point_alias = [
+      "net1/",
+      "net2/",
+      "net3/"
+    ]
+    end_point = []
+    for n in end_point_name:
+      end_point.append(graph.get_tensor_by_name(n))
 
-  return outputs_to_scales_to_logits
+    draw_images = []
+    for x, a in zip(end_point, end_point_alias):
+      with tf.variable_scope("vis", reuse=tf.AUTO_REUSE):
+        draw_feature = tf.layers.conv2d(x, 512, 1, name=a+"compress_feat1", activation=tf.nn.relu)
+        draw_feature = tf.layers.conv2d(draw_feature, 256, 1, name=a+"compress_feat2", activation=tf.nn.relu)
+        image = tf.layers.conv2d(draw_feature, 3, 3, padding='SAME', name="draw", activation=tf.nn.tanh)
+        draw_images.append(image)
+
+    # Add visualization
+    visualize_images = []
+    target_size = samples[common.IMAGE].get_shape().as_list()[1:3]
+    for vis_im, name in zip(draw_images, end_point_alias):
+      im_resize = tf.image.resize_bilinear(vis_im, target_size, align_corners=True)
+      visualize_images.append(im_resize)
+      tf.summary.image('reconstruction/' + name, im_resize)
+      # im_tar = tf.Print(samples[common.IMAGE], [tf.reduce_max(samples[common.IMAGE]), tf.reduce_min(samples[common.IMAGE])])
+      im_tar = samples[common.IMAGE] / 127.5 - 1.0
+      reconstruction_loss = tf.reduce_mean(tf.abs(im_resize - im_tar))
+      reconstruction_loss = tf.identity(reconstruction_loss, name=name+"recons_loss")
+      tf.add_to_collection(tf.GraphKeys.LOSSES, reconstruction_loss)
+
+  return outputs_to_scales_to_logits, visualize_images, end_point
 
 
 def main(unused_argv):
@@ -248,7 +274,8 @@ def main(unused_argv):
   tf.gfile.MakeDirs(FLAGS.train_logdir)
   tf.logging.info('Training on %s set', FLAGS.train_split)
 
-  with tf.Graph().as_default() as graph:
+  if True:
+    graph = tf.get_default_graph()
     with tf.device(config.inputs_device()):
       samples = input_generator.get(
           dataset,
@@ -264,132 +291,66 @@ def main(unused_argv):
           is_training=True,
           model_variant=FLAGS.model_variant)
       inputs_queue = prefetch_queue.prefetch_queue(
-          samples, capacity=128 * config.num_clones)
+          samples, capacity=32 * config.num_clones)
 
     # Create the global step on the device storing the variables.
     with tf.device(config.variables_device()):
-      global_step = tf.train.get_or_create_global_step()
-
-      # Define the model and create clones.
-      model_fn = _build_deeplab
-      model_args = (inputs_queue, {
-          common.OUTPUT_TYPE: dataset.num_classes
-      }, dataset.ignore_label)
-      clones = model_deploy.create_clones(config, model_fn, args=model_args)
-
-      # Gather update_ops from the first clone. These contain, for example,
-      # the updates for the batch_norm variables created by model_fn.
-      first_clone_scope = config.clone_scope(0)
-      update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, first_clone_scope)
-
-    # Gather initial summaries.
-    summaries = set(tf.get_collection(tf.GraphKeys.SUMMARIES))
-
-    # Add summaries for model variables.
-    for model_var in slim.get_model_variables():
-      summaries.add(tf.summary.histogram(model_var.op.name, model_var))
-
-    # Add summaries for images, labels, semantic predictions
-    if FLAGS.save_summaries_images:
-      summary_image = graph.get_tensor_by_name(
-          ('%s/%s:0' % (first_clone_scope, common.IMAGE)).strip('/'))
-      summaries.add(
-          tf.summary.image('samples/%s' % common.IMAGE, summary_image))
-
-      first_clone_label = graph.get_tensor_by_name(
-          ('%s/%s:0' % (first_clone_scope, common.LABEL)).strip('/'))
-      # Scale up summary image pixel values for better visualization.
-      pixel_scaling = max(1, 255 // dataset.num_classes)
-      summary_label = tf.cast(first_clone_label * pixel_scaling, tf.uint8)
-      summaries.add(
-          tf.summary.image('samples/%s' % common.LABEL, summary_label))
-
-      first_clone_output = graph.get_tensor_by_name(
-          ('%s/%s:0' % (first_clone_scope, common.OUTPUT_TYPE)).strip('/'))
-      predictions = tf.expand_dims(tf.argmax(first_clone_output, 3), -1)
-
-      summary_predictions = tf.cast(predictions * pixel_scaling, tf.uint8)
-      summaries.add(
-          tf.summary.image(
-              'samples/%s' % common.OUTPUT_TYPE, summary_predictions))
-
-    # Add summaries for losses.
-    for loss in tf.get_collection(tf.GraphKeys.LOSSES, first_clone_scope):
-      summaries.add(tf.summary.scalar('losses/%s' % loss.op.name, loss))
-
-    # Build the optimizer based on the device specification.
-    with tf.device(config.optimizer_device()):
-      learning_rate = train_utils.get_model_learning_rate(
-          FLAGS.learning_policy, FLAGS.base_learning_rate,
-          FLAGS.learning_rate_decay_step, FLAGS.learning_rate_decay_factor,
-          FLAGS.training_number_of_steps, FLAGS.learning_power,
-          FLAGS.slow_start_step, FLAGS.slow_start_learning_rate)
-      optimizer = tf.train.MomentumOptimizer(learning_rate, FLAGS.momentum)
-      summaries.add(tf.summary.scalar('learning_rate', learning_rate))
-
-    startup_delay_steps = FLAGS.task * FLAGS.startup_delay_steps
-    for variable in slim.get_model_variables():
-      summaries.add(tf.summary.histogram(variable.op.name, variable))
-
-    with tf.device(config.variables_device()):
-      total_loss, grads_and_vars = model_deploy.optimize_clones(
-          clones, optimizer)
-      total_loss = tf.check_numerics(total_loss, 'Loss is inf or nan.')
-      summaries.add(tf.summary.scalar('total_loss', total_loss))
-
-      # Modify the gradients for biases and last layer variables.
-      last_layers = model.get_extra_layer_scopes(
-          FLAGS.last_layers_contain_logits_only)
-      grad_mult = train_utils.get_model_gradient_multipliers(
-          last_layers, FLAGS.last_layer_gradient_multiplier)
-      if grad_mult:
-        grads_and_vars = slim.learning.multiply_gradients(
-            grads_and_vars, grad_mult)
-
-      # Create gradient update op.
-      grad_updates = optimizer.apply_gradients(
-          grads_and_vars, global_step=global_step)
-      update_ops.append(grad_updates)
-      update_op = tf.group(*update_ops)
-      with tf.control_dependencies([update_op]):
-        train_tensor = tf.identity(total_loss, name='train_op')
-
-    # Add the summaries from the first clone. These contain the summaries
-    # created by model_fn and either optimize_clones() or _gather_clone_loss().
-    summaries |= set(
-        tf.get_collection(tf.GraphKeys.SUMMARIES, first_clone_scope))
-
-    # Merge all summaries together.
-    summary_op = tf.summary.merge(list(summaries))
-
+      net_output, images, end_points = _build_deeplab(
+        inputs_queue,
+        {common.OUTPUT_TYPE: dataset.num_classes},
+        dataset.ignore_label)
+    
     # Soft placement allows placing on CPU ops without GPU implementation.
     session_config = tf.ConfigProto(
         allow_soft_placement=True, log_device_placement=False)
     session_config.gpu_options.allow_growth = True
 
-    # Start the training.
-    slim.learning.train(
-        train_tensor,
-        logdir=FLAGS.train_logdir,
-        log_every_n_steps=FLAGS.log_steps,
-        master=FLAGS.master,
-        number_of_steps=FLAGS.training_number_of_steps,
-        is_chief=(FLAGS.task == 0),
-        session_config=session_config,
-        startup_delay_steps=startup_delay_steps,
-        init_fn=train_utils.get_model_init_fn(
+    sess = tf.InteractiveSession(config=session_config)
+    tf.train.start_queue_runners(sess=sess)
+    train_utils.get_model_init_fn(
             FLAGS.train_logdir,
             FLAGS.tf_initial_checkpoint,
-            FLAGS.initialize_last_layer,
-            last_layers,
-            ignore_missing_vars=True),
-        summary_op=summary_op,
-        save_summaries_secs=FLAGS.save_summaries_secs,
-        save_interval_secs=FLAGS.save_interval_secs)
+            True,
+            None,
+            ignore_missing_vars=True)(sess)
 
+    saver = tf.train.Saver()
+    saver.restore(sess, FLAGS.tf_initial_checkpoint)
+
+    net_input = graph.get_tensor_by_name('image:0')
+    net_image = images[-1]
+    gen_feature = end_points[0]
+    predictions = graph.get_tensor_by_name('semantic:0')
+    num_classes = int(predictions.get_shape()[-1])
+    segmentation = tf.argmax(predictions, 3)
+    groundtruth = graph.get_tensor_by_name('label:0')
+    masks = []
+    masks_area = []
+    for i in range(num_classes):
+        masks.append(tf.cast(tf.equal(groundtruth, i), tf.float32))
+        masks_area.append(tf.reduce_sum(masks[-1]))
+
+    # id=0: road
+    masked_losses = []
+    for i in range(num_classes):
+        masked_diff = tf.abs(masks[i] * (net_image - net_input))
+        masked_losses.append(
+            tf.reduce_sum(masked_diff) / (1e-6 + masks_area[i])
+            )
+        class_grads.extend(
+            masked_losses[-1], gen_feature
+            ))
+
+    grad = tf.gradients(masked_losses[0], gen_feature)
+
+    lr = 1.0
+    new_gen_feature = gen_feature - lr * grad
+    new_output = 
+
+    print("=> Test")
+    net_output_data, images_data, end_points_data = sess.run([net_output, images, end_points])
+    return sess, net_output, images, end_points
 
 if __name__ == '__main__':
-  flags.mark_flag_as_required('train_logdir')
-  flags.mark_flag_as_required('tf_initial_checkpoint')
-  flags.mark_flag_as_required('dataset_dir')
-  tf.app.run()
+  sess, net_output, images, end_points = main(0)
+  net_output_data, images_data, end_points_data = sess.run([net_output, images, end_points])

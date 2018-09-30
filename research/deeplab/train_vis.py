@@ -198,7 +198,7 @@ def _build_deeplab(inputs_queue, outputs_to_num_classes, ignore_label):
       crop_size=FLAGS.train_crop_size,
       atrous_rates=FLAGS.atrous_rates,
       output_stride=FLAGS.output_stride)
-  outputs_to_scales_to_logits = model.multi_scale_logits(
+  outputs_to_scales_to_logits, top_features = model.multi_scale_logits(
       samples[common.IMAGE],
       model_options=model_options,
       image_pyramid=FLAGS.image_pyramid,
